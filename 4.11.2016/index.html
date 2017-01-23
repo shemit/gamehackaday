@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Did I Win?</title>
+<style>
+body {
+  background: #333;
+  font-family: sans-serif;
+  color: #ddd;
+}
+#wrap {
+  margin: 0 auto;
+  padding: 40px;
+  width: 800px;
+}
+#winbn {
+  width: 100%;
+  padding: 10px;
+  background: #666;
+  color: #fff;
+  border: #ccc solid 1px;
+}
+#result {
+  margin-top: 20px;
+  padding: 20px;
+}
+
+</style>
+
+</head>
+
+<body>
+<div id="wrap">
+  <h1>Did I Win?</h1>
+  <input id="winbn" type="button" value="PLAY THE GAME" onClick="winbnclick()" />
+  <div id="result">
+  </div>
+</div>
+<script>
+var winbn = document.getElementById("winbn");
+var resultspc = document.getElementById("result");
+
+var winbnclick = function() {
+  var randfloat = Math.random();
+  if (randfloat > 0.8) {
+    resultspc.innerHTML = "You saved the day. Game Over.";
+  } else {
+    resultspc.innerHTML = "You died. Game Over.";
+  }
+}
+</script>
+</body>
+
+</html>

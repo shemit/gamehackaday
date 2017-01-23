@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+  }
+</style>
+</head>
+<body>
+<div id="container"></div>
+<script src="three.min.js"></script>
+<script src="OrbitControls.js"></script>
+<script src="SimplexNoise.js"></script>
+<script src="GPUComputationRenderer.js"></script>
+<script id="heightmapFragmentShader" type="x-shader/x-fragment">
+#include <common>
+uniform vec2 rippleOrigin;
+uniform float rippleSize;
+uniform float viscosityConstant;
+
+#define deltaTime ( 1.0 / 60.0 )
+#define GRAVITY_CONSTANT ( resolution.x * deltaTime * 3.0 )
+void main() {
+  vec2 cellSize = 1.0 / resolution.xy;
+  vec2 uv = gl_FragCoord.xy * cellSize;
+  // heightmapValue.x == height
+  // heightmapValue.y == velocity
+  // heightmapValue.z, heightmapValue.w not used
+  vec4 heightmapValue = texture2D( heightmap, uv );
+  // Get neighbours
+  vec4 north = texture2D( heightmap, uv + vec2( 0.0, cellSize.y ) );
+  vec4 south = texture2D( heightmap, uv + vec2( 0.0, - cellSize.y ) );
+  vec4 east = texture2D( heightmap, uv + vec2( cellSize.x, 0.0 ) );
+  vec4 west = texture2D( heightmap, uv + vec2( - cellSize.x, 0.0 ) );
+  float sump = north.x + south.x + east.x + west.x - 4.0 * heightmapValue.x;
+  float accel = sump * GRAVITY_CONSTANT;
+  // Dynamics
+  heightmapValue.y += accel;
+  heightmapValue.x += heightmapValue.y * deltaTime;
+
+  float distance = length( 
+      ( uv - vec2( 0.5) ) * BOUNDS - vec2(rippleOrigin.x, -rippleOrigin.y ) 
+    ) * PI / rippleSize ;
+
+  // Viscosity
+  heightmapValue.x += sump * viscosityConstant;
+  // Mouse influence
+
+  float ripplePhase = clamp( 
+    // Get the distance from origin to the location of the point
+    distance,
+    0.0, 
+    PI 
+  );
+    
+
+  heightmapValue.x += cos(ripplePhase) + 1.0;
+  gl_FragColor = heightmapValue;
+}
+</script>
+<script id="vertexShader" type="x-shader/x-vertex">
+
+uniform sampler2D heightmap;
+#define PHONG
+varying vec3 vViewPosition;
+#ifndef FLAT_SHADED
+  varying vec3 vNormal;
+#endif
+#include <common>
+#include <uv_pars_vertex>
+#include <uv2_pars_vertex>
+#include <displacementmap_pars_vertex>
+#include <envmap_pars_vertex>
+#include <color_pars_vertex>
+#include <morphtarget_pars_vertex>
+#include <skinning_pars_vertex>
+#include <shadowmap_pars_vertex>
+#include <logdepthbuf_pars_vertex>
+#include <clipping_planes_pars_vertex>
+void main() {
+  vec2 cellSize = vec2( 1.0 / WIDTH, 1.0 / WIDTH );
+  #include <uv_vertex>
+  #include <uv2_vertex>
+  #include <color_vertex>
+  // # include <beginnormal_vertex>
+  // Compute normal from heightmap
+  vec3 objectNormal = vec3(
+    ( texture2D( heightmap, uv + vec2( - cellSize.x, 0 ) ).x - texture2D( heightmap, uv + vec2( cellSize.x, 0 ) ).x ) * WIDTH / BOUNDS,
+    ( texture2D( heightmap, uv + vec2( 0, - cellSize.y ) ).x - texture2D( heightmap, uv + vec2( 0, cellSize.y ) ).x ) * WIDTH / BOUNDS,
+    1.0 );
+  //<beginnormal_vertex>
+  #include <morphnormal_vertex>
+  #include <skinbase_vertex>
+  #include <skinnormal_vertex>
+  #include <defaultnormal_vertex>
+#ifndef FLAT_SHADED // Normal computed with derivatives when FLAT_SHADED
+  vNormal = normalize( transformedNormal );
+#endif
+  //# include <begin_vertex>
+  float heightValue = texture2D( heightmap, uv ).x;
+  vec3 transformed = vec3( position.x, position.y, heightValue );
+  //<begin_vertex>
+  #include <displacementmap_vertex>
+  #include <morphtarget_vertex>
+  #include <skinning_vertex>
+  #include <project_vertex>
+  #include <logdepthbuf_vertex>
+  #include <clipping_planes_vertex>
+  vViewPosition = - mvPosition.xyz;
+  #include <worldpos_vertex>
+  #include <envmap_vertex>
+  #include <shadowmap_vertex>
+}
+</script>
+
+
+<script>
+var WIDTH = 32;
+var NUM_TEXELS = WIDTH * WIDTH;
+
+var BOUNDS = 512;
+var BOUNDS_HALF = BOUNDS * 0.5;
+
+var container;
+var camera, scene, renderer, controls;
+
+var waterMesh;
+var gpuCompute;
+var heightmapVariable;
+var waterUniforms;
+var smoothShader;
+
+var simplex = new SimplexNoise();
+var windowHalfX = window.innerWidth / 2;
+var windowHalfY = window.innerHeight / 2;
+
+init();
+generateSurface();
+animate();
+
+function init() {
+  container = document.createElement('div');
+  document.body.appendChild(container);
+
+  camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight, 
+    1,
+    3000
+  );
+  camera.position.set(0, 200, 350);
+
+  scene = new THREE.Scene();
+
+  var sun = new THREE.DirectionalLight(0xFFFFFF, 1.0);
+  sun.position.set(300, 400, 175);
+  scene.add(sun);
+
+  renderer = new THREE.WebGLRenderer();
+  renderer.setClearColor(0x000000);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  container.appendChild(renderer.domElement);
+  controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+  document.addEventListener('keydown', function(event) {
+    if (event.keyCode === 87) {
+      waterMesh.material = ! waterMesh.material.wireframe;
+      waterMesh.material.needsUpdate = true;
+    }
+  }, false);
+
+  window.addEventListener('resize', onWindowResize, false);
+}
+
+function generateSurface() {
+  var materialColor = 0x0040c0;
+
+  var geometry = new THREE.PlaneBufferGeometry(
+    BOUNDS,
+    BOUNDS,
+    WIDTH - 1,
+    WIDTH - 1
+  );
+
+  var material = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.ShaderLib['phong'].uniforms,
+      {
+        heightmap: {value: null}
+      }
+    ]),
+    vertexShader: document.getElementById('vertexShader').textContent,
+    fragmentShader: THREE.ShaderChunk['meshphong_frag']
+  });
+
+  material.lights = true;
+  material.color = new THREE.Color(materialColor);
+  material.specular = new THREE.Color(0x111111);
+  material.shininess = 50;
+
+  material.uniforms.diffuse.value = material.color;
+  material.uniforms.specular.value = material.specular;
+  material.uniforms.shininess.value = Math.max( material.shininess, 1e-4);
+  material.uniforms.opacity.value = material.opacity;
+
+  material.defines.WIDTH = WIDTH.toFixed(1);
+  material.defines.BOUNDS = BOUNDS.toFixed(1);
+
+  waterUniforms = material.uniforms;
+  waterMesh = new THREE.Mesh(geometry, material);
+
+  waterMesh.rotation.x = -Math.PI / 2;
+  waterMesh.matrixAutoUpdate = false;
+  waterMesh.updateMatrix();
+  
+  scene.add(waterMesh);
+
+  gpuCompute = new GPUComputationRenderer(WIDTH, WIDTH, renderer);
+  var heightmap0 = gpuCompute.createTexture();
+  
+  heightMapVariable = gpuCompute.addVariable(
+    "heightmap",
+    document.getElementById('heightmapFragmentShader').textContent,
+    heightmap0
+  );
+
+  gpuCompute.setVariableDependencies(heightMapVariable, [heightMapVariable]);
+
+  heightMapVariable.material.uniforms.rippleOrigin = {
+    value: new THREE.Vector2(-1, 0)
+  };
+
+  heightMapVariable.material.uniforms.rippleSize = { value: 80.0 };
+  heightMapVariable.material.uniforms.viscosityConstant = { value: 0.08 };
+  heightMapVariable.material.defines.BOUNDS = BOUNDS.toFixed(1);
+
+  var error = gpuCompute.init();
+  if (error != null) {
+    console.log(error);
+  }
+}
+
+function onWindowResize(event) {
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  render();
+}
+
+function render() {
+  gpuCompute.compute();
+  waterUniforms.heightmap.value = 
+    gpuCompute.getCurrentRenderTarget(heightMapVariable).texture;
+  renderer.render(scene, camera);
+}
+
+</script>
+</body>
+</html>
