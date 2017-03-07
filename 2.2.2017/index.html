@@ -14,6 +14,7 @@ body {
 <script src="../lib/three/examples/js/controls/OrbitControls.js"></script>
 <script id="vertexShader" type="x-shader/x-vertex">
 uniform float time;
+uniform float total_time;
 uniform vec3 color;
 
 varying vec3 vColor;
@@ -23,14 +24,15 @@ void main() {
   float timeScale = 4.0;
   float newTime = timeScale * time;
   float scalePos = position.y / 3.0;
-  float ripple = floor(((sign(sin(scalePos + (newTime))) + sin(scalePos + newTime)) / 3.8) + 0.5);
-  vec3 fgcolor = vec3(1.0, 0.0, 0.0);
-  vec3 bgcolor = vec3(0.0, 0.0, 1.0);
+  float ripple = sin(scalePos + (newTime));
+  vec3 fgcolor = vec3(0.0, 1.0, 0.0);
+  vec3 bgcolor = vec3(1.0, 0.0, 1.0);
   vColor = fgcolor * ripple + (1.0 - ripple) * bgcolor;
   //vColor = position;
-
   vNormal = normal;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vec3 newPosition = position + 2.0 * ripple * vNormal;
+
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
 }
 
 </script>
@@ -39,6 +41,7 @@ varying vec3 vNormal;
 varying vec3 vColor;
 
 uniform float time;
+uniform float total_time;
 uniform vec3 color;
 
 void main() {
@@ -54,6 +57,9 @@ var container;
 var camera, scene, render;
 var mesh;
 var uniforms;
+var previous_time = (new Date()).getTime();
+var total_time = 0;
+var delta_time = 0;
 
 init();
 animate();
@@ -70,6 +76,7 @@ function init() {
   scene = new THREE.Scene();
   uniforms = {
     time: { value: 0.0 },
+    total_time: { value: 0.0 },
     color: { value: new THREE.Vector3() }
   };
 
@@ -89,7 +96,7 @@ function init() {
   renderer = new THREE.WebGLRenderer();
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(window.devicePixelRatio);
-  var orbit = new THREE.OrbitControls(camera, renderer.domElement);
+  //var orbit = new THREE.OrbitControls(camera, renderer.domElement);
   container.appendChild(renderer.domElement);
 
   window.addEventListener('resize', function() {
@@ -97,10 +104,63 @@ function init() {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
+
+  document.onkeydown = handleKeyDown;
+  document.onkeyup = handleKeyUp;
 }
 
-var previous_time = (new Date()).getTime();
-var total_time = 0;
+var pressedKeys = [];
+var shader_time = 0;
+function up() {
+  shader_time += delta_time;
+  uniforms.time.value = shader_time;
+}
+
+function down() {
+  shader_time -= delta_time;
+  uniforms.time.value = shader_time;
+
+}
+
+function left() {
+
+}
+
+function right() {
+
+}
+
+var keymappings = {
+  38: up,
+  40: down,
+  37: left,
+  39: right
+};
+function handleKeyDown(event) {
+  if (!pressedKeys.includes(event.keyCode)) {
+    pressedKeys.push(event.keyCode);
+  }
+}
+
+function handleKeyUp(event) {
+  var pressevent = -1;
+  var keyID = -1;
+  var i = 0;
+  for (key in pressedKeys) {
+    keyID = pressedKeys[key];
+    pressevent = i;
+    i++;
+  }
+  if (pressevent > -1) {
+    /*
+    if (keymappings[keyID] && !isKeyLocked) {
+      keymappings[keyID]();
+      isKeyLocked = true;
+    }
+    */
+    pressedKeys.splice(pressevent, 1);
+  }
+}
 function animate() {
   requestAnimationFrame(animate);
   render();
@@ -108,9 +168,15 @@ function animate() {
 
 
 function render() {
+  for (var i in pressedKeys) {
+    keymappings[pressedKeys[i]]();
+  }
+
+
   var current_time = (new Date()).getTime();
-  total_time += (previous_time - current_time) / 1000;
-  uniforms.time.value = total_time;
+  delta_time = (previous_time - current_time) / 1000;
+  total_time += delta_time;
+  uniforms.total_time.value = total_time;
   renderer.render(scene, camera);
   previous_time = current_time;
 }
