@@ -109,8 +109,48 @@ function init() {
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
+  window.addEventListener('touchstart', handleStart, false);
+  window.addEventListener('touchend', handleEnd, false);
+  window.addEventListener('touchcancel', handleCancel, false);
+  window.addEventListener('touchmove', handleMove, false);
+
   document.onkeydown = handleKeyDown;
   document.onkeyup = handleKeyUp;
+}
+
+var xtouchstart = 0;
+var ytouchstart = 0;
+var xtouchend = 0;
+var ytouchend = 0;
+
+function touchstart(event) {
+  event.preventDefault();
+  xtouchstart = event.touches[0].clientX;
+  ytouchstart = event.touches[0].clientY;
+}
+
+function touchend(event) {
+  event.preventDefault();
+}
+
+function touchcancel(event) {
+  event.preventDefault();
+}
+
+function touchmove(event) {
+  event.preventDefault();
+  var diffx = xtouchstart - xtouchend;
+  var diffy = ytouchstart - ytouchend;
+
+  if (Math.abs(diffx) > Math.abs(diffy) {
+  } else {
+    if (Math.sign(diffy) > 0) {
+      up();
+    } else {
+      down();
+    }
+
+  }
 }
 
 var pressedKeys = [];
@@ -123,7 +163,6 @@ function up() {
 function down() {
   shader_time -= delta_time;
   uniforms.time.value = shader_time;
-
 }
 
 function left() {
