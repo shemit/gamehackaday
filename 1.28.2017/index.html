@@ -5,6 +5,8 @@
       body {
         margin: 0px;
         overflow: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
       }
     </style>
   </head>
@@ -163,21 +165,51 @@
       }
       
       var touchLocation; 
-      function handleStart(event) {
-        preventDefault();
+      var xtouchstart = 0;
+      var xtouchend = 0;
 
+      var ytouchstart = 0;
+      var ytouchend = 0;
+
+      function handleStart(event) {
+        event.preventDefault();
+        xtouchstart = event.touches[0].clientX;
+        ytouchstart = event.touches[0].clientY;
       }
 
       function handleEnd(event) {
-        preventDefault();
+        event.preventDefault();
+        if (isKeyLocked) return;
+        var diffx = xtouchstart - xtouchend;
+        var diffy = ytouchstart - ytouchend;
+        if (Math.abs(diffx) > Math.abs(diffy)) {
+          if (Math.sign(diffx) > 0) {
+            isKeyLocked = true;
+            left();
+          } else {
+            isKeyLocked = true;
+            right();
+          }
+        } else {
+          if (Math.sign(diffy) > 0) {
+            isKeyLocked = true;
+            up();
+          } else {
+            isKeyLocked = true;
+            down();
+          }
+        }
       }
 
       function handleCancel(event) {
-        preventDefault();
+        event.preventDefault();
       }
 
       function handleMove(event) {
-        preventDefault();
+        event.preventDefault();
+        xtouchend = event.touches[0].clientX;
+        ytouchend = event.touches[0].clientY;
+        
       }
 
       var pressedKeys = [];
