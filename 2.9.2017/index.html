@@ -12,10 +12,15 @@ padding:0;
 <body>
 <script src="../lib/three/build/three.js"></script>
 <script src="../lib/three/examples/js/controls/OrbitControls.js"></script>
-<script id="vertexShader" type="x-shader/x-vertex">
-
+<script id="drawVertShader" type="x-shader/x-vertex">
+  void main() {
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
 </script>
-<script id="fragmentShader" type="x-shader/x-fragment">
+<script id="drawFragShader" type="x-shader/x-fragment">
+  void main() {
+    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+  }
 </script>
 <div id="container"></div>
 <script>
@@ -24,6 +29,9 @@ init();
 animate();
 var container;
 var camera, scene, renderer, geometry, particles;
+var renderTarget;
+
+var simMtl, drawMtl;
 
 function init() {
   container = document.getElementById('container');
@@ -40,21 +48,34 @@ function init() {
   renderer.setPixelRatio(window.devicePixelRatio);
   var orbit = new THREE.OrbitControls(camera, renderer.domElement);
   container.appendChild(renderer.domElement);
-  geometry = new THREE.Geometry();
+
   var particleCount = 2000;
+  var particleArray = [];
 
-  for (var i = 0; i < particleCount; i++) {
-    var vertex = new THREE.Vector3();
-    vertex.x = Math.random() * 1000 - 500;
-    vertex.y = Math.random() * 1000 - 500;
-    vertex.z = Math.random() * 1000 - 500;
-    geometry.vertices.push(vertex);
+  var ATTR_WIDTH = 3;
+  var size = 512;
+  geometry = new THREE.BufferGeometry(particleArray);
+
+  var pos = new Float32Array(size * size * ATTR_WIDTH);
+  for (var x = 0; x < size; x++) {
+    for (var y = 0; y < size; y++) {
+      var idx = x + y * size;
+      pos[ATTR_WIDTH * idx] = (x + 0.5) / size;
+      pos[ATTR_WIDTH * idx + 1] = (y + 0.5) / size;
+      pos[ATTR_WIDTH * idx + 2] = idx / (size * size);
+    }
   }
-
-  var material = new THREE.PointCloudMaterial({
-    size: 3
+  
+  var drawVertShader = document.getElementById('drawVertShader').textContent;
+  var drawFragShader = document.getElementById('drawFragShader').textContent;
+  drawMtl = new THREE.ShaderMaterial({
+    vertexShader: drawVertShader,
+    fragmentShader: drawFragShader
   });
-  particles = new THREE.PointCloud(geometry, material);
+
+  geometry.addAttribute("position", new THREE.BufferAttribute(pos, ATTR_WIDTH));
+  particles = new THREE.PointCloud(geometry, drawMtl);
+
   scene.add(particles);
   
   window.addEventListener('resize', function() {
