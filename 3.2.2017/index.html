@@ -88,24 +88,27 @@ padding:0;
     // equation of circle
     // x * x + y * y = 1
     // y = sqrt[-x^2 + 1 ];
-    float maxz = sqrt(-1.0 * posx * posx + 1.0);
+    float maxz = sqrt(-1.0 * pos.x * pos.x + 1.0);
     float posz = maxz * 2.0 * (rand(sin(time + .23) * vUv) - 0.5) ;
 
     vec2 r_vec = pos.xz;
     float new_y = pos.y - 0.3;
+
     if (length(r_vec) > 1.0) {
       r_vec = normalize(r_vec);
     }
 
-    float maxy = sqrt(-1.0 * pos.x * pos.x - 1.0 *pos.z * pos.z + 1.0);
+    float maxy = sqrt( -1.0 * pos.x * pos.x - 1.0 * pos.z * pos.z + 50.0 * 50.0);
+    //float posy = maxy * 2.0 * (rand(sin(time + .15) * vUv) - 0.5);
+    //float maxy = 0.0;
 
-    if (pos.y < -50.0 * maxy) {
-      new_y = 50.0 * maxy;
+    if (sqrt(pos.y * pos.y + pos.z * pos.z + pos.x * pos.x) > 50.0 && pos.y < 0.0) {
+      new_y = maxy;
     }
 
     gl_FragColor = vec4(
       pos.x,
-      pos.y,
+      new_y,
       pos.z,
       1.0
     );
