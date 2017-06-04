@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+
+body, html, *{
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+</style>
+</head>
+<body>
+<div id="container"></div>
+<script src="../lib/three/build/three.js"></script>
+<script src="../lib/three/examples/js/renderers/CanvasRenderer.js"></script>
+<script src="../lib/three/examples/js/renderers/Projector.js"></script>
+<script src="../lib/three/examples/js/controls/OrbitControls.js"></script>
+<script id="drawVertShader" type="x-shader/x-vertex">
+  varying vec3 vPosition;
+
+  void main() {
+    vPosition = position;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+</script>
+<script id="drawFragShader" type="x-shader/x-fragment">
+  uniform vec3 color;
+  varying vec3 vPosition;
+
+  void main() {
+    float newcol = 0.0;
+    if (fract(vPosition.x) > 0.0205 && fract(vPosition.y) > 0.0205) {
+      newcol = 1.0;
+    }
+
+    gl_FragColor = vec4(
+      newcol,
+      newcol,
+      newcol,
+      1.0
+    );
+  }
+</script>
+<script>
+var container;
+var camera, scene, renderer;
+var plane, cube;
+var group;
+var x = 0;
+var y = 0;
+
+function make_box() {
+}
+
+function init() {
+  container = document.getElementById('container');
+  camera = new THREE.PerspectiveCamera(
+    70,
+    window.innerWidth / window.innerHeight,
+    1,
+    1000
+  );
+
+  camera.position.y = 0;
+  camera.position.z = 10;
+
+  scene = new THREE.Scene();
+
+  var geometry = new THREE.BoxGeometry(1, 1, 1);
+  for (var i = 0; i < geometry.faces.length; i += 2) {
+    var hex = Math.random() * 0xffffff;
+    geometry.faces[i].color.setHex(hex);
+    geometry.faces[i + 1].color.setHex(hex);
+  }
+  var material = new THREE.MeshBasicMaterial(
+    {
+      vertexColors: THREE.FaceColors,
+      overdraw: 0.5
+    }
+  );
+
+  group = new THREE.Group();
+  cube = new THREE.Mesh(geometry, material);
+  cube.translateX(0.5);
+  cube.translateY(0.5);
+  cube.translateZ(0.5);
+  group.add(cube);
+  scene.add(group);
+
+  var plane_geom = new THREE.PlaneBufferGeometry(100, 100);
+  plane_geom.position = new THREE.Vector3(0, 0 -2.5);
+  var drawVertShader = document.getElementById('drawVertShader').textContent;
+  var drawFragShader = document.getElementById('drawFragShader').textContent;
+  var plane_mtl = new THREE.ShaderMaterial({
+    vertexShader: drawVertShader,
+    fragmentShader: drawFragShader,
+    uniforms: {
+      color: { value: new THREE.Vector3() }
+    }
+  });
+  plane = new THREE.Mesh(plane_geom, plane_mtl);
+  scene.add(plane);
+
+  renderer = new THREE.WebGLRenderer(geometry, material);
+  renderer.setClearColor( 0xf0f0f0 );
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  var orbit = new THREE.OrbitControls(camera, renderer.domElement);
+  container.appendChild(renderer.domElement);
+
+  window.addEventListener('resize', onWindowResize, false);
+
+  document.onkeydown = handleKeyDown;
+  document.onkeyup = handleKeyUp;
+}
+
+function onWindowResize() {
+  windowHalfX = window.innerWidth / 2;
+  windowHalfY = window.innerHeight / 2;
+
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+
+  renderer.setSize( window.innerWidth, window.innerHeight );
+}
+
+var rotationDirection;
+var targetRotation;
+var isRotating = false;
+var rotateAxis = null;
+
+function rotate(axis, angle) {
+  var inverse_cube = group.quaternion.clone().inverse();
+  // inverse quat on x axis
+  axis.applyQuaternion(inverse_cube);
+
+  // rotate around the axis
+  var quat = new THREE.Quaternion();
+  quat.setFromAxisAngle(
+    axis,
+    angle
+  );
+
+  var orig = group.quaternion.clone();
+  rotateAxis = axis.clone();
+  targetRotation = orig.multiply(quat);
+  rotationDirection = Math.sign(angle);
+}
+
+function up() {
+  var axis = new THREE.Vector3(1, 0, 0);
+  var angle = -Math.PI/2;
+  rotate(axis, angle);
+  x += 5;
+  return true;
+}
+
+function down() {
+  var axis = new THREE.Vector3(1, 0, 0);
+  var angle = Math.PI/2;
+  rotate(axis, angle);
+  return true;
+}
+
+function left() {
+  var axis = new THREE.Vector3(0, 1, 0);
+  var angle = -Math.PI/2;
+  rotate(axis, angle);
+  return true;
+}
+
+function right() {
+  var axis = new THREE.Vector3(0, 1, 0);
+  var angle = Math.PI/2;
+  rotate(axis, angle);
+  return true;
+
+}
+
+var keymappings = {
+  87: up,
+  83: down,
+  65: left,
+  68: right
+}
+
+function handleKeyUp(event) { 
+}
+
+var locked = false;
+function handleKeyDown(event) {
+  console.log(event.keyCode);
+  if (keymappings[event.keyCode] && !locked) {
+    locked = keymappings[event.keyCode]();
+  }
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  render();
+}
+
+var total_time = 0;
+var then = Date.now();
+
+function render() {
+  renderer.render(scene, camera);
+
+  var now = Date.now();
+  var delta_time = now - then;
+  total_time += delta_time;
+
+  if (targetRotation != null) {
+    start_time = total_time;
+
+    var rotator = new THREE.Quaternion();
+
+    rotator.setFromAxisAngle(
+      rotateAxis,
+      rotationDirection * delta_time / 500.0
+    );
+
+    var curr_quat = group.quaternion.clone();
+    var inv_target = targetRotation.clone().inverse();
+    var quat = curr_quat.multiply(inv_target);
+
+    group.quaternion.multiply(rotator);
+
+    if (Math.abs(quat.w - 1) < 0.0001) {
+      group.quaternion.set(
+        targetRotation.x,
+        targetRotation.y,
+        targetRotation.z,
+        targetRotation.w
+      );
+
+      targetRotation = null;
+      locked = false;
+    }
+    //cube.location = new THREE.Vector3(x, y, 0);
+  }
+  then = now;
+
+}
+
+init();
+animate();
+
+</script>
+</body>
+</html>
